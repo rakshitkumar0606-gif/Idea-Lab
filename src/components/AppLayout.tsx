@@ -1,19 +1,24 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { NewsBanner } from "./NewsBanner";
+import { NotificationsPanel } from "./NotificationsPanel";
 import { useAuth } from "@/lib/auth";
 import { useDemo } from "@/lib/demoStore";
+import { useNotifications } from "@/lib/notificationContext";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  LayoutDashboard, Map, ListChecks, BarChart3, MessagesSquare, Users, LogOut, Radio, Sparkles, Boxes, IndianRupee
+  LayoutDashboard, Map, ListChecks, BarChart3, MessagesSquare, Users, LogOut, Radio, Sparkles, Boxes, IndianRupee, Bell
 } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 const adminNav = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { to: "/map", label: "Coordination Map", icon: Map },
   { to: "/assignments", label: "Assignments", icon: Users },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
+  { to: "/task-tracking", label: "Task Tracking", icon: ListChecks },
+  { to: "/team-management", label: "Team Management", icon: Users },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/chat", label: "Communications", icon: MessagesSquare },
   { to: "/resources", label: "Resources", icon: Boxes },
@@ -31,9 +36,11 @@ const teamNav = [
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { effectiveRole, effectiveName, isDemo, signOut } = useAuth();
+  const { unreadCount } = useNotifications();
   const demo = useDemo();
   const location = useLocation();
   const navigate = useNavigate();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const nav = effectiveRole === "admin" ? adminNav : teamNav;
 
@@ -115,12 +122,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="font-display text-sm text-muted-foreground">
             <span className="text-primary">●</span> Live operations dashboard
           </div>
-          <div className="md:hidden flex gap-1">
-            {nav.slice(0, 4).map(n => (
-              <Link key={n.to} to={n.to} className="p-2 rounded-md hover:bg-muted/50">
-                <n.icon className="h-4 w-4" />
-              </Link>
-            ))}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="relative"
+              onClick={() => setNotificationsOpen(true)}
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                  {unreadCount}
+                </Badge>
+              )}
+            </Button>
+            <div className="md:hidden flex gap-1">
+              {nav.slice(0, 4).map(n => (
+                <Link key={n.to} to={n.to} className="p-2 rounded-md hover:bg-muted/50">
+                  <n.icon className="h-4 w-4" />
+                </Link>
+              ))}
+            </div>
           </div>
         </header>
         <NewsBanner />
@@ -128,6 +150,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      
+      <NotificationsPanel open={notificationsOpen} onOpenChange={setNotificationsOpen} />
     </div>
   );
 }

@@ -79,9 +79,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isDemo = !!demo.session;
   const effectiveRole: Role | null = isDemo ? demo.session!.role : (profile?.role ?? null);
   const effectiveName = isDemo ? demo.session!.name : (profile?.name ?? user?.email ?? "");
+  
+  // Create demo profile with team_id when in demo mode
+  const demoProfile: Profile | null = isDemo && demo.session
+    ? {
+        id: `demo-${demo.session.role}`,
+        name: demo.session.name,
+        role: demo.session.role,
+        email: null,
+        team_id: demo.session.team_id ?? null,
+      }
+    : null;
 
   return (
-    <Ctx.Provider value={{ loading, user, session, profile, effectiveRole, effectiveName, isDemo, signIn, signUp, signOut }}>
+    <Ctx.Provider value={{ loading, user, session, profile: demoProfile || profile, effectiveRole, effectiveName, isDemo, signIn, signUp, signOut }}>
       {children}
     </Ctx.Provider>
   );

@@ -61,7 +61,10 @@ function Assignments() {
         const score = (distScore * 0.5 + availScore * 0.3 + workloadPenalty * 0.2) * 100;
         return { team: t, distance: d, score };
       })
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        if (a.distance !== b.distance) return a.distance - b.distance;
+        return b.score - a.score;
+      });
   }, [teams, selectedDisaster]);
 
   function handleAssign(teamId: string) {

@@ -10,6 +10,12 @@ import type {
 import { toast } from "sonner";
 import { Zap } from "lucide-react";
 
+export type TaskCompletionReport = {
+  resourceType: string;
+  resourceUsed: number;
+  completionNotes: string;
+};
+
 export type CoordinationData = {
   loading: boolean;
   teams: DemoTeam[];
@@ -21,10 +27,29 @@ export type CoordinationData = {
   transactions: DemoFundTransaction[];
   assignTeam: (disasterId: string, teamId: string) => Promise<void>;
   updateAssignmentStatus: (id: string, status: "assigned" | "started" | "completed") => Promise<void>;
+  completeAssignmentWithReport: (id: string, report: TaskCompletionReport) => Promise<void>;
   sendMessage: (body: string, isBroadcast?: boolean) => Promise<void>;
   allocateFunds: (disasterId: string, amount: number, description: string) => Promise<void>;
   updateFundUsage: (disasterId: string, amount: number, description: string) => Promise<void>;
 };
+
+function sortAssignmentsByNewest<T extends { assigned_at: string }>(items: T[]): T[] {
+  return [...items].sort(
+    (a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime(),
+  );
+}
+
+function distKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) *
+      Math.cos((b.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
 
 export function useTacticalData(): CoordinationData {
   const { isDemo, effectiveRole, profile } = useAuth();
@@ -133,6 +158,8 @@ export function useTacticalData(): CoordinationData {
 
     ch.on("postgres_changes", { event: "*", schema: "public", table: "teams" },
       (payload: any) => applyChange(setLiveTeams, payload));
+    ch.on("postgres_changes", { event: "*", schema: "public", table: "resources" },
+      (payload: any) => applyChange(setLiveResources, payload));
 
     // Funds & Transactions
     ch.on("postgres_changes", { event: "*", schema: "public", table: "funds" } as any,
@@ -169,10 +196,11 @@ export function useTacticalData(): CoordinationData {
   if (isDemo) {
     return {
       loading: false,
-      teams: demo.teams, disasters: demo.disasters, assignments: demo.assignments,
+      teams: demo.teams, disasters: demo.disasters, assignments: sortAssignmentsByNewest(demo.assignments),
       resources: demo.resources, messages: demo.messages, funds: demo.funds, transactions: demo.transactions,
       assignTeam: demo.assignTeam,
       updateAssignmentStatus: demo.updateAssignmentStatus,
+      completeAssignmentWithReport: demo.completeAssignmentWithReport,
       sendMessage: demo.sendMessage,
       allocateFunds: demo.allocateFunds,
       updateFundUsage: demo.updateFundUsage,
@@ -180,17 +208,168 @@ export function useTacticalData(): CoordinationData {
   }
   return {
     loading,
-    teams: liveTeams, disasters: liveDisasters, assignments: liveAssignments,
+    teams: liveTeams, disasters: liveDisasters, assignments: sortAssignmentsByNewest(liveAssignments),
     resources: liveResources, messages: liveMessages, funds: liveFunds, transactions: liveTransactions,
     assignTeam: async (disasterId: string, teamId: string) => {
-      await supabase.from("assignments").insert({ disaster_id: disasterId, team_id: teamId });
+      // Insert assignment
+      const { data: assignment } = await supabase.from("assignments").insert({ disaster_id: disasterId, team_id: teamId }).select().single();
+      
+      // Update disaster status
       await supabase.from("disasters").update({ status: "in_progress" }).eq("id", disasterId).eq("status", "pending");
+      
+      // Get team members for notification
+      const { data: teamMembers } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("team_id", teamId);
+      
+      // Get disaster info
+      const { data: disaster } = await supabase
+        .from("disasters")
+        .select("title, location_label, severity")
+        .eq("id", disasterId)
+        .single();
+      
+      // Get team info
+      const { data: team } = await supabase
+        .from("teams")
+        .select("name")
+        .eq("id", teamId)
+        .single();
+
+      // Send notifications to all team members
+      if (teamMembers && disaster && team) {
+        const notificationTitle = `New Task Assignment: ${disaster.title}`;
+        const notificationBody = `${team.name} has been assigned to ${disaster.title} at ${disaster.location_label} (${disaster.severity} severity)`;
+        
+        const notificationInserts = teamMembers.map(member => ({
+          user_id: member.id,
+          title: notificationTitle,
+          body: notificationBody,
+          type: "assignment",
+          related_id: assignment?.id,
+        }));
+        
+        if (notificationInserts.length > 0) {
+          await supabase.from("notifications").insert(notificationInserts);
+        }
+      }
     },
     updateAssignmentStatus: async (id: string, status: "assigned" | "started" | "completed") => {
       const patch: any = { status };
       if (status === "started") patch.started_at = new Date().toISOString();
       if (status === "completed") patch.completed_at = new Date().toISOString();
-      await supabase.from("assignments").update(patch).eq("id", id);
+      
+      // Update assignment
+      const { data: assignment } = await supabase.from("assignments").update(patch).eq("id", id).select().single();
+      
+      // If completed, notify admin and send update notification
+      if (status === "completed" && assignment) {
+        // Get disaster and team info
+        const { data: disaster } = await supabase
+          .from("disasters")
+          .select("title, created_by")
+          .eq("id", assignment.disaster_id)
+          .single();
+        
+        const { data: team } = await supabase
+          .from("teams")
+          .select("name")
+          .eq("id", assignment.team_id)
+          .single();
+        
+        // Notify admin about completion
+        if (disaster?.created_by) {
+          await supabase.from("notifications").insert({
+            user_id: disaster.created_by,
+            title: `Task Completed: ${disaster.title}`,
+            body: `${team?.name || "Team"} has completed the task for ${disaster.title}`,
+            type: "update",
+            related_id: id,
+          });
+        }
+      }
+      
+      if (status === "started" && assignment) {
+        // Notify admin that task has started
+        const { data: disaster } = await supabase
+          .from("disasters")
+          .select("title, created_by")
+          .eq("id", assignment.disaster_id)
+          .single();
+        
+        const { data: team } = await supabase
+          .from("teams")
+          .select("name")
+          .eq("id", assignment.team_id)
+          .single();
+        
+        if (disaster?.created_by) {
+          await supabase.from("notifications").insert({
+            user_id: disaster.created_by,
+            title: `Task Started: ${disaster.title}`,
+            body: `${team?.name || "Team"} has started working on ${disaster.title}`,
+            type: "update",
+            related_id: id,
+          });
+        }
+      }
+    },
+    completeAssignmentWithReport: async (id: string, report: TaskCompletionReport) => {
+      const { data: assignment } = await supabase
+        .from("assignments")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (!assignment) return;
+
+      const reportText = [
+        `Completion Report (${new Date().toLocaleString()}):`,
+        `Resource used: ${report.resourceUsed} ${report.resourceType}`,
+        `Notes: ${report.completionNotes || "N/A"}`,
+      ].join("\n");
+      const mergedNotes = [assignment.notes?.trim(), reportText].filter(Boolean).join("\n\n");
+
+      await supabase
+        .from("assignments")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          notes: mergedNotes,
+        })
+        .eq("id", id);
+
+      const { data: disaster } = await supabase
+        .from("disasters")
+        .select("id, title, lat, lng, created_by")
+        .eq("id", assignment.disaster_id)
+        .single();
+
+      if (disaster && report.resourceUsed > 0) {
+        const { data: matchingResources } = await supabase
+          .from("resources")
+          .select("*")
+          .eq("type", report.resourceType);
+
+        const nearest = (matchingResources ?? [])
+          .filter((r: any) => r.quantity > 0)
+          .sort((a: any, b: any) => distKm(disaster, a) - distKm(disaster, b))[0];
+
+        if (nearest) {
+          const nextQty = Math.max(0, Number(nearest.quantity ?? 0) - report.resourceUsed);
+          await supabase.from("resources").update({ quantity: nextQty }).eq("id", nearest.id);
+        }
+      }
+
+      if (disaster?.created_by) {
+        await supabase.from("notifications").insert({
+          user_id: disaster.created_by,
+          title: `Task Completed: ${disaster.title}`,
+          body: `Resource used: ${report.resourceUsed} ${report.resourceType}. ${report.completionNotes || "No extra notes."}`,
+          type: "update",
+          related_id: id,
+        } as any);
+      }
     },
     sendMessage: async (body: string, isBroadcast = false) => {
       const { data: u } = await supabase.auth.getUser();

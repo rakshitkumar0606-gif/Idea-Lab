@@ -1135,6 +1135,12 @@ export const DEMO_ASSIGNMENTS: DemoAssignment[] = [
   { id: "a4", disaster_id: "d4", team_id: "t3", status: "completed", notes: "Containment achieved", assigned_at: new Date(Date.now() - 86400000 * 5).toISOString(), started_at: new Date(Date.now() - 86400000 * 5).toISOString(), completed_at: new Date(Date.now() - 86400000 * 4).toISOString() },
   { id: "a5", disaster_id: "d7", team_id: "t10", status: "started", notes: "Monitoring embankments", assigned_at: new Date(Date.now() - 3600000 * 6).toISOString(), started_at: new Date(Date.now() - 3600000 * 4).toISOString() },
   { id: "a6", disaster_id: "d6", team_id: "t8", status: "assigned", notes: "Heatwave response coordination", assigned_at: new Date(Date.now() - 3600000 * 1).toISOString() },
+  // Demo assignments for preview - visible to demo NGO team
+  { id: "a7", disaster_id: "d2", team_id: "t1", status: "assigned", notes: "Provide medical support and rescue coordination at affected areas", assigned_at: new Date(Date.now() - 3600000 * 3).toISOString() },
+  { id: "a8", disaster_id: "d8", team_id: "t1", status: "started", notes: "Water pumping and evacuation in progress", assigned_at: new Date(Date.now() - 3600000 * 6).toISOString(), started_at: new Date(Date.now() - 3600000 * 2).toISOString() },
+  // Demo assignments for preview - visible to demo Government team
+  { id: "a9", disaster_id: "d5", team_id: "t2", status: "assigned", notes: "Structural assessment and damage survey required", assigned_at: new Date(Date.now() - 3600000 * 10).toISOString() },
+  { id: "a10", disaster_id: "d2", team_id: "t2", status: "completed", notes: "Preliminary dam inspection completed successfully", assigned_at: new Date(Date.now() - 86400000 * 1).toISOString(), started_at: new Date(Date.now() - 3600000 * 12).toISOString(), completed_at: new Date(Date.now() - 3600000 * 3).toISOString() },
 ];
 
 export const DEMO_RESOURCES: DemoResource[] = [

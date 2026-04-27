@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppTeamManagementRouteImport } from './routes/_app/team-management'
 import { Route as AppTasksRouteImport } from './routes/_app/tasks'
+import { Route as AppTaskTrackingRouteImport } from './routes/_app/task-tracking'
 import { Route as AppResourcesRouteImport } from './routes/_app/resources'
 import { Route as AppMapRouteImport } from './routes/_app/map'
 import { Route as AppFundsRouteImport } from './routes/_app/funds'
@@ -35,9 +37,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppTeamManagementRoute = AppTeamManagementRouteImport.update({
+  id: '/team-management',
+  path: '/team-management',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTasksRoute = AppTasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTaskTrackingRoute = AppTaskTrackingRouteImport.update({
+  id: '/task-tracking',
+  path: '/task-tracking',
   getParentRoute: () => AppRoute,
 } as any)
 const AppResourcesRoute = AppResourcesRouteImport.update({
@@ -86,7 +98,9 @@ export interface FileRoutesByFullPath {
   '/funds': typeof AppFundsRoute
   '/map': typeof AppMapRoute
   '/resources': typeof AppResourcesRoute
+  '/task-tracking': typeof AppTaskTrackingRoute
   '/tasks': typeof AppTasksRoute
+  '/team-management': typeof AppTeamManagementRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -98,7 +112,9 @@ export interface FileRoutesByTo {
   '/funds': typeof AppFundsRoute
   '/map': typeof AppMapRoute
   '/resources': typeof AppResourcesRoute
+  '/task-tracking': typeof AppTaskTrackingRoute
   '/tasks': typeof AppTasksRoute
+  '/team-management': typeof AppTeamManagementRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -112,7 +128,9 @@ export interface FileRoutesById {
   '/_app/funds': typeof AppFundsRoute
   '/_app/map': typeof AppMapRoute
   '/_app/resources': typeof AppResourcesRoute
+  '/_app/task-tracking': typeof AppTaskTrackingRoute
   '/_app/tasks': typeof AppTasksRoute
+  '/_app/team-management': typeof AppTeamManagementRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -126,7 +144,9 @@ export interface FileRouteTypes {
     | '/funds'
     | '/map'
     | '/resources'
+    | '/task-tracking'
     | '/tasks'
+    | '/team-management'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -138,7 +158,9 @@ export interface FileRouteTypes {
     | '/funds'
     | '/map'
     | '/resources'
+    | '/task-tracking'
     | '/tasks'
+    | '/team-management'
   id:
     | '__root__'
     | '/'
@@ -151,7 +173,9 @@ export interface FileRouteTypes {
     | '/_app/funds'
     | '/_app/map'
     | '/_app/resources'
+    | '/_app/task-tracking'
     | '/_app/tasks'
+    | '/_app/team-management'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -183,11 +207,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/team-management': {
+      id: '/_app/team-management'
+      path: '/team-management'
+      fullPath: '/team-management'
+      preLoaderRoute: typeof AppTeamManagementRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/tasks': {
       id: '/_app/tasks'
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof AppTasksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/task-tracking': {
+      id: '/_app/task-tracking'
+      path: '/task-tracking'
+      fullPath: '/task-tracking'
+      preLoaderRoute: typeof AppTaskTrackingRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/resources': {
@@ -250,7 +288,9 @@ interface AppRouteChildren {
   AppFundsRoute: typeof AppFundsRoute
   AppMapRoute: typeof AppMapRoute
   AppResourcesRoute: typeof AppResourcesRoute
+  AppTaskTrackingRoute: typeof AppTaskTrackingRoute
   AppTasksRoute: typeof AppTasksRoute
+  AppTeamManagementRoute: typeof AppTeamManagementRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -261,7 +301,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppFundsRoute: AppFundsRoute,
   AppMapRoute: AppMapRoute,
   AppResourcesRoute: AppResourcesRoute,
+  AppTaskTrackingRoute: AppTaskTrackingRoute,
   AppTasksRoute: AppTasksRoute,
+  AppTeamManagementRoute: AppTeamManagementRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

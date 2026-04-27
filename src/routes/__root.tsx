@@ -2,6 +2,7 @@ import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-r
 import appCss from "../styles.css?url";
 import { DemoStoreProvider } from "@/lib/demoStore";
 import { AuthProvider } from "@/lib/auth";
+import { NotificationProvider } from "@/lib/notificationContext";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -52,8 +53,10 @@ function RootComponent() {
   return (
     <DemoStoreProvider>
       <AuthProvider>
-        <Outlet />
-        <Toaster theme="dark" position="top-right" />
+        <NotificationProvider>
+          <Outlet />
+          <Toaster theme="dark" position="top-right" />
+        </NotificationProvider>
       </AuthProvider>
     </DemoStoreProvider>
   );

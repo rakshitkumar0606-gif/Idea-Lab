@@ -7,7 +7,13 @@ import {
 
 const KEY = "reliefsync.demo.session";
 
-export type DemoSession = { active: true; role: Role; name: string } | null;
+// Map demo roles to team IDs for task filtering
+const DEMO_TEAM_MAP: Record<string, string> = {
+  "ngo": "t1",      // Mumbai Swift Network (NGO)
+  "government": "t2" // SDRF Team Varanasi (Government)
+};
+
+export type DemoSession = { active: true; role: Role; name: string; team_id?: string } | null;
 
 type DemoStoreValue = {
   session: DemoSession;
@@ -22,6 +28,7 @@ type DemoStoreValue = {
   transactions: DemoFundTransaction[];
   assignTeam: (disasterId: string, teamId: string) => Promise<void>;
   updateAssignmentStatus: (assignmentId: string, status: "assigned" | "started" | "completed") => Promise<void>;
+  completeAssignmentWithReport: (assignmentId: string, report: { resourceType: string; resourceUsed: number; completionNotes: string }) => Promise<void>;
   sendMessage: (body: string, isBroadcast?: boolean) => Promise<void>;
   addDisaster: (d: Omit<DemoDisaster, "id" | "created_at" | "status">) => Promise<void>;
   allocateFunds: (disasterId: string, amount: number, description: string) => Promise<void>;
@@ -29,6 +36,18 @@ type DemoStoreValue = {
 };
 
 const Ctx = createContext<DemoStoreValue | null>(null);
+
+function distKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) *
+      Math.cos((b.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
 
 function loadSession(): DemoSession {
   if (typeof window === "undefined") return null;
@@ -43,7 +62,7 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
   const [teams, setTeams] = useState<DemoTeam[]>(DEMO_TEAMS);
   const [disasters, setDisasters] = useState<DemoDisaster[]>(DEMO_DISASTERS);
   const [assignments, setAssignments] = useState<DemoAssignment[]>(DEMO_ASSIGNMENTS);
-  const [resources] = useState<DemoResource[]>(DEMO_RESOURCES);
+  const [resources, setResources] = useState<DemoResource[]>(DEMO_RESOURCES);
   const [messages, setMessages] = useState<DemoMessage[]>(DEMO_MESSAGES);
   const [funds, setFunds] = useState<DemoFund[]>(DEMO_FUNDS);
   const [transactions, setTransactions] = useState<DemoFundTransaction[]>(DEMO_TRANSACTIONS);
@@ -52,7 +71,7 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
     const name =
       role === "admin" ? "Demo Admin" :
       role === "ngo" ? "Demo NGO Lead" : "Demo Govt Officer";
-    const s: DemoSession = { active: true, role, name };
+    const s: DemoSession = { active: true, role, name, team_id: DEMO_TEAM_MAP[role] };
     localStorage.setItem(KEY, JSON.stringify(s));
     setSession(s);
   }, []);
@@ -126,6 +145,62 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [assignments, disasters, teams]);
 
+  const completeAssignmentWithReport = useCallback(async (
+    id: string,
+    report: { resourceType: string; resourceUsed: number; completionNotes: string },
+  ) => {
+    const assignment = assignments.find(a => a.id === id);
+    if (!assignment) return;
+    const disaster = disasters.find(d => d.id === assignment.disaster_id);
+    const team = teams.find(t => t.id === assignment.team_id);
+
+    const reportText = [
+      `Completion Report (${new Date().toLocaleString()}):`,
+      `Resource used: ${report.resourceUsed} ${report.resourceType}`,
+      `Notes: ${report.completionNotes || "N/A"}`,
+    ].join("\n");
+
+    setAssignments(prev => prev.map(a => {
+      if (a.id !== id) return a;
+      return {
+        ...a,
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        notes: [a.notes?.trim(), reportText].filter(Boolean).join("\n\n"),
+      };
+    }));
+
+    if (disaster && report.resourceUsed > 0) {
+      setResources(prev => {
+        const nearest = [...prev]
+          .filter(r => r.type === report.resourceType && r.quantity > 0)
+          .sort((a, b) => distKm(disaster, a) - distKm(disaster, b))[0];
+        if (!nearest) return prev;
+        return prev.map(r =>
+          r.id === nearest.id
+            ? { ...r, quantity: Math.max(0, r.quantity - report.resourceUsed) }
+            : r,
+        );
+      });
+    }
+
+    if (team && disaster) {
+      setMessages(prev => [...prev, {
+        id: `m-comp-${Date.now()}`,
+        sender: "Central Command",
+        sender_role: "admin",
+        body: `MISSION COMPLETED: ${team.name} at ${disaster.title}. Used ${report.resourceUsed} ${report.resourceType}.`,
+        is_broadcast: true,
+        created_at: new Date().toISOString(),
+      }]);
+    }
+
+    const remaining = assignments.filter(a => a.disaster_id === assignment.disaster_id && a.id !== id && a.status !== "completed");
+    if (remaining.length === 0) {
+      setDisasters(prev => prev.map(d => d.id === assignment.disaster_id ? { ...d, status: "completed" } : d));
+    }
+  }, [assignments, disasters, teams]);
+
   const sendMessage = useCallback(async (body: string, isBroadcast = false) => {
     if (!session) return;
     setMessages(prev => [...prev, {
@@ -182,7 +257,7 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       session, enter, exit, teams, disasters, assignments, resources, messages, funds, transactions,
-      assignTeam, updateAssignmentStatus, sendMessage, addDisaster, allocateFunds, updateFundUsage
+      assignTeam, updateAssignmentStatus, completeAssignmentWithReport, sendMessage, addDisaster, allocateFunds, updateFundUsage
     }}>
       {children}
     </Ctx.Provider>
